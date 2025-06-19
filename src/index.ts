@@ -378,6 +378,10 @@ class BitbucketServer {
                 items: { type: "string" },
                 description: "List of reviewer usernames",
               },
+              draft: {
+                type: "boolean",
+                description: "Whether to create the pull request as a draft",
+              },
             },
             required: [
               "workspace",
@@ -893,6 +897,84 @@ class BitbucketServer {
             required: ["workspace", "project_key"],
           },
         },
+        {
+          name: "createDraftPullRequest",
+          description: "Create a new draft pull request",
+          inputSchema: {
+            type: "object",
+            properties: {
+              workspace: {
+                type: "string",
+                description: "Bitbucket workspace name",
+              },
+              repo_slug: { type: "string", description: "Repository slug" },
+              title: { type: "string", description: "Pull request title" },
+              description: {
+                type: "string",
+                description: "Pull request description",
+              },
+              sourceBranch: {
+                type: "string",
+                description: "Source branch name",
+              },
+              targetBranch: {
+                type: "string",
+                description: "Target branch name",
+              },
+              reviewers: {
+                type: "array",
+                items: { type: "string" },
+                description: "List of reviewer usernames",
+              },
+            },
+            required: [
+              "workspace",
+              "repo_slug",
+              "title",
+              "description",
+              "sourceBranch",
+              "targetBranch",
+            ],
+          },
+        },
+        {
+          name: "publishDraftPullRequest",
+          description: "Publish a draft pull request to make it ready for review",
+          inputSchema: {
+            type: "object",
+            properties: {
+              workspace: {
+                type: "string",
+                description: "Bitbucket workspace name",
+              },
+              repo_slug: { type: "string", description: "Repository slug" },
+              pull_request_id: {
+                type: "string",
+                description: "Pull request ID",
+              },
+            },
+            required: ["workspace", "repo_slug", "pull_request_id"],
+          },
+        },
+        {
+          name: "convertTodraft",
+          description: "Convert a regular pull request to draft status",
+          inputSchema: {
+            type: "object",
+            properties: {
+              workspace: {
+                type: "string",
+                description: "Bitbucket workspace name",
+              },
+              repo_slug: { type: "string", description: "Repository slug" },
+              pull_request_id: {
+                type: "string",
+                description: "Pull request ID",
+              },
+            },
+            required: ["workspace", "repo_slug", "pull_request_id"],
+          },
+        },
       ],
     }));
 
@@ -930,7 +1012,8 @@ class BitbucketServer {
               args.description as string,
               args.sourceBranch as string,
               args.targetBranch as string,
-              args.reviewers as string[]
+              args.reviewers as string[],
+              args.draft as boolean
             );
           case "getPullRequest":
             return await this.getPullRequest(
@@ -1060,6 +1143,28 @@ class BitbucketServer {
               args.development as Record<string, any>,
               args.production as Record<string, any>,
               args.branch_types as Array<Record<string, any>>
+            );
+          case "createDraftPullRequest":
+            return await this.createDraftPullRequest(
+              args.workspace as string,
+              args.repo_slug as string,
+              args.title as string,
+              args.description as string,
+              args.sourceBranch as string,
+              args.targetBranch as string,
+              args.reviewers as string[]
+            );
+          case "publishDraftPullRequest":
+            return await this.publishDraftPullRequest(
+              args.workspace as string,
+              args.repo_slug as string,
+              args.pull_request_id as string
+            );
+          case "convertTodraft":
+            return await this.convertTodraft(
+              args.workspace as string,
+              args.repo_slug as string,
+              args.pull_request_id as string
             );
           default:
             throw new McpError(
@@ -1206,7 +1311,8 @@ class BitbucketServer {
     description: string,
     sourceBranch: string,
     targetBranch: string,
-    reviewers?: string[]
+    reviewers?: string[],
+    draft?: boolean
   ) {
     try {
       logger.info("Creating Bitbucket pull request", {
@@ -1241,6 +1347,7 @@ class BitbucketServer {
           },
           reviewers: reviewersArray,
           close_source_branch: true,
+          draft: draft === true, // Only set draft=true if explicitly specified
         }
       );
 
@@ -2174,6 +2281,138 @@ class BitbucketServer {
       throw new McpError(
         ErrorCode.InternalError,
         `Failed to publish pending comments: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+  }
+
+  async createDraftPullRequest(
+    workspace: string,
+    repo_slug: string,
+    title: string,
+    description: string,
+    sourceBranch: string,
+    targetBranch: string,
+    reviewers?: string[]
+  ) {
+    try {
+      logger.info("Creating draft Bitbucket pull request", {
+        workspace,
+        repo_slug,
+        title,
+        sourceBranch,
+        targetBranch,
+      });
+
+      // Use the existing createPullRequest method with draft=true
+      return await this.createPullRequest(
+        workspace,
+        repo_slug,
+        title,
+        description,
+        sourceBranch,
+        targetBranch,
+        reviewers,
+        true // Set draft to true
+      );
+    } catch (error) {
+      logger.error("Error creating draft pull request", {
+        error,
+        workspace,
+        repo_slug,
+      });
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to create draft pull request: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+  }
+
+  async publishDraftPullRequest(
+    workspace: string,
+    repo_slug: string,
+    pull_request_id: string
+  ) {
+    try {
+      logger.info("Publishing draft pull request", {
+        workspace,
+        repo_slug,
+        pull_request_id,
+      });
+
+      // Update the pull request to set draft=false
+      const response = await this.api.put(
+        `/repositories/${workspace}/${repo_slug}/pullrequests/${pull_request_id}`,
+        {
+          draft: false,
+        }
+      );
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(response.data, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      logger.error("Error publishing draft pull request", {
+        error,
+        workspace,
+        repo_slug,
+        pull_request_id,
+      });
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to publish draft pull request: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+  }
+
+  async convertTodraft(
+    workspace: string,
+    repo_slug: string,
+    pull_request_id: string
+  ) {
+    try {
+      logger.info("Converting pull request to draft", {
+        workspace,
+        repo_slug,
+        pull_request_id,
+      });
+
+      // Update the pull request to set draft=true
+      const response = await this.api.put(
+        `/repositories/${workspace}/${repo_slug}/pullrequests/${pull_request_id}`,
+        {
+          draft: true,
+        }
+      );
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(response.data, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      logger.error("Error converting pull request to draft", {
+        error,
+        workspace,
+        repo_slug,
+        pull_request_id,
+      });
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to convert pull request to draft: ${
           error instanceof Error ? error.message : String(error)
         }`
       );

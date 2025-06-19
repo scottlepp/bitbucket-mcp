@@ -177,6 +177,7 @@ Creates a new pull request.
 - `sourceBranch`: Source branch name
 - `targetBranch`: Target branch name
 - `reviewers` (optional): List of reviewer usernames
+- `draft` (optional): Whether to create the pull request as a draft
 
 #### `getPullRequest`
 
@@ -265,6 +266,42 @@ Requests changes on a pull request.
 #### `removeChangeRequest`
 
 Removes a change request from a pull request.
+
+**Parameters:**
+
+- `workspace`: Bitbucket workspace name
+- `repo_slug`: Repository slug
+- `pull_request_id`: Pull request ID
+
+#### `createDraftPullRequest`
+
+Creates a new draft pull request.
+
+**Parameters:**
+
+- `workspace`: Bitbucket workspace name
+- `repo_slug`: Repository slug
+- `title`: Pull request title
+- `description`: Pull request description
+- `sourceBranch`: Source branch name
+- `targetBranch`: Target branch name
+- `reviewers` (optional): List of reviewer usernames
+
+**Note:** This is equivalent to calling `createPullRequest` with `draft: true`.
+
+#### `publishDraftPullRequest`
+
+Publishes a draft pull request to make it ready for review.
+
+**Parameters:**
+
+- `workspace`: Bitbucket workspace name
+- `repo_slug`: Repository slug
+- `pull_request_id`: Pull request ID
+
+#### `convertTodraft`
+
+Converts a regular pull request to draft status.
 
 **Parameters:**
 
