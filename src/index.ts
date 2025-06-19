@@ -583,6 +583,29 @@ class BitbucketServer {
           },
         },
         {
+          name: "addPullRequestComment",
+          description: "Add a comment to a pull request",
+          inputSchema: {
+            type: "object",
+            properties: {
+              workspace: {
+                type: "string",
+                description: "Bitbucket workspace name",
+              },
+              repo_slug: { type: "string", description: "Repository slug" },
+              pull_request_id: {
+                type: "string",
+                description: "Pull request ID",
+              },
+              content: {
+                type: "string",
+                description: "Comment content in markdown format",
+              },
+            },
+            required: ["workspace", "repo_slug", "pull_request_id", "content"],
+          },
+        },
+        {
           name: "getRepositoryBranchingModel",
           description: "Get the branching model for a repository",
           inputSchema: {
@@ -880,6 +903,13 @@ class BitbucketServer {
               args.workspace as string,
               args.repo_slug as string,
               args.pull_request_id as string
+            );
+          case "addPullRequestComment":
+            return await this.addPullRequestComment(
+              args.workspace as string,
+              args.repo_slug as string,
+              args.pull_request_id as string,
+              args.content as string
             );
           case "getRepositoryBranchingModel":
             return await this.getRepositoryBranchingModel(
@@ -1560,6 +1590,52 @@ class BitbucketServer {
       throw new McpError(
         ErrorCode.InternalError,
         `Failed to get pull request commits: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+  }
+
+  async addPullRequestComment(
+    workspace: string,
+    repo_slug: string,
+    pull_request_id: string,
+    content: string
+  ) {
+    try {
+      logger.info("Adding comment to Bitbucket pull request", {
+        workspace,
+        repo_slug,
+        pull_request_id,
+      });
+
+      const response = await this.api.post(
+        `/repositories/${workspace}/${repo_slug}/pullrequests/${pull_request_id}/comments`,
+        {
+          content: {
+            raw: content,
+          },
+        }
+      );
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(response.data, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      logger.error("Error adding comment to pull request", {
+        error,
+        workspace,
+        repo_slug,
+        pull_request_id,
+      });
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to add pull request comment: ${
           error instanceof Error ? error.message : String(error)
         }`
       );
