@@ -284,17 +284,48 @@ Lists comments on a pull request.
 - `repo_slug`: Repository slug
 - `pull_request_id`: Pull request ID
 
-#### `createPullRequestComment`
+#### `addPullRequestComment`
 
-Creates a comment on a pull request.
+Creates a comment on a pull request (general or inline).
 
 **Parameters:**
 
 - `workspace`: Bitbucket workspace name
 - `repo_slug`: Repository slug
 - `pull_request_id`: Pull request ID
-- `content`: Comment content
-- `inline` (optional): Inline comment information
+- `content`: Comment content in markdown format
+- `inline` (optional): Inline comment information for commenting on specific lines
+
+**Inline Comment Format:**
+
+The `inline` parameter allows you to create comments on specific lines of code in the pull request diff:
+
+```json
+{
+  "path": "src/file.ts",
+  "to": 15,     // Line number in NEW version (for added/modified lines)
+  "from": 10    // Line number in OLD version (for deleted/modified lines) 
+}
+```
+
+**Examples:**
+
+- **General comment**: Omit the `inline` parameter for a general pull request comment
+- **Comment on new line**: Use only `to` parameter
+- **Comment on deleted line**: Use only `from` parameter  
+- **Comment on modified line**: Use both `from` and `to` parameters
+
+**Usage:**
+```javascript
+// General comment
+addPullRequestComment(workspace, repo, pr_id, "Great work!")
+
+// Inline comment on new line 25
+addPullRequestComment(workspace, repo, pr_id, "Consider error handling here", {
+  path: "src/service.ts",
+  to: 25
+})
+```
 
 #### `getPullRequestComment`
 
