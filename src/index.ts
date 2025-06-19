@@ -1482,15 +1482,25 @@ class BitbucketServer {
         pull_request_id,
       });
 
-      const response = await this.api.get(
-        `/repositories/${workspace}/${repo_slug}/pullrequests/${pull_request_id}/diff`,
-        {
-          headers: {
-            Accept: "text/plain",
-          },
-          responseType: "text",
-        }
+      // First get the pull request details to extract commit information
+      const prResponse = await this.api.get(
+        `/repositories/${workspace}/${repo_slug}/pullrequests/${pull_request_id}`
       );
+
+      const sourceCommit = prResponse.data.source.commit.hash;
+      const destinationCommit = prResponse.data.destination.commit.hash;
+
+      // Construct the correct diff URL with the proper format
+      // The format is: /repositories/{workspace}/{repo_slug}/diff/{source_repo}:{source_commit}%0D{destination_commit}?from_pullrequest_id={pr_id}&topic=true
+      const diffUrl = `/repositories/${workspace}/${repo_slug}/diff/${workspace}/${repo_slug}:${sourceCommit}%0D${destinationCommit}?from_pullrequest_id=${pull_request_id}&topic=true`;
+
+      const response = await this.api.get(diffUrl, {
+        headers: {
+          Accept: "text/plain",
+        },
+        responseType: "text",
+        maxRedirects: 5, // Enable redirect following
+      });
 
       return {
         content: [
