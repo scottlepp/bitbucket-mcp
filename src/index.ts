@@ -307,6 +307,10 @@ class BitbucketServer {
                 type: "number",
                 description: "Maximum number of repositories to return",
               },
+              name: {
+                type: "string",
+                description: "Filter repositories by name (partial match supported)",
+              },
             },
           },
         },
@@ -990,7 +994,8 @@ class BitbucketServer {
           case "listRepositories":
             return await this.listRepositories(
               args.workspace as string,
-              args.limit as number
+              args.limit as number,
+              args.name as string
             );
           case "getRepository":
             return await this.getRepository(
@@ -1187,7 +1192,7 @@ class BitbucketServer {
     });
   }
 
-  async listRepositories(workspace?: string, limit: number = 10) {
+  async listRepositories(workspace?: string, limit: number = 10, name?: string) {
     try {
       // Use default workspace if not provided
       const wsName = workspace || this.config.defaultWorkspace;
@@ -1202,22 +1207,32 @@ class BitbucketServer {
       logger.info("Listing Bitbucket repositories", {
         workspace: wsName,
         limit,
+        name,
       });
 
+      // Build query parameters
+      const params: Record<string, any> = { limit };
+      if (name) {
+        params.q = `name~"${name}"`;
+      }
+
       const response = await this.api.get(`/repositories/${wsName}`, {
-        params: { limit },
+        params,
       });
+
+      // Use the results from Bitbucket API directly
+      let repositories = response.data.values;
 
       return {
         content: [
           {
             type: "text",
-            text: JSON.stringify(response.data.values, null, 2),
+            text: JSON.stringify(repositories, null, 2),
           },
         ],
       };
     } catch (error) {
-      logger.error("Error listing repositories", { error, workspace });
+      logger.error("Error listing repositories", { error, workspace, name });
       throw new McpError(
         ErrorCode.InternalError,
         `Failed to list repositories: ${
