@@ -7,7 +7,7 @@ import {
   ListToolsRequestSchema,
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
-import axios, { AxiosInstance } from "axios";
+import axios, { AxiosInstance, AxiosError } from "axios";
 import winston from "winston";
 
 // =========== LOGGER SETUP ===========
@@ -228,6 +228,109 @@ interface BitbucketConfig {
   username?: string;
   password?: string;
   defaultWorkspace?: string;
+}
+
+/**
+ * Represents a Bitbucket pipeline
+ */
+interface BitbucketPipeline {
+  uuid: string;
+  type: "pipeline";
+  build_number: number;
+  creator: BitbucketAccount;
+  repository: BitbucketRepository;
+  target: BitbucketPipelineTarget;
+  trigger: BitbucketPipelineTrigger;
+  state: BitbucketPipelineState;
+  created_on: string;
+  completed_on?: string;
+  build_seconds_used?: number;
+  variables?: BitbucketPipelineVariable[];
+  configuration_sources?: BitbucketPipelineConfigurationSource[];
+  links: Record<string, BitbucketLink[]>;
+}
+
+/**
+ * Represents a pipeline target
+ */
+interface BitbucketPipelineTarget {
+  type: string;
+  ref_type?: string;
+  ref_name?: string;
+  commit?: {
+    type: "commit";
+    hash: string;
+  };
+  selector?: {
+    type: string;
+    pattern: string;
+  };
+}
+
+/**
+ * Represents a pipeline trigger
+ */
+interface BitbucketPipelineTrigger {
+  type: string;
+  name?: string;
+}
+
+/**
+ * Represents a pipeline state
+ */
+interface BitbucketPipelineState {
+  type: string;
+  name: "PENDING" | "IN_PROGRESS" | "SUCCESSFUL" | "FAILED" | "ERROR" | "STOPPED";
+  result?: {
+    type: string;
+    name: "SUCCESSFUL" | "FAILED" | "ERROR" | "STOPPED";
+  };
+}
+
+/**
+ * Represents a pipeline variable
+ */
+interface BitbucketPipelineVariable {
+  type: "pipeline_variable";
+  key: string;
+  value: string;
+  secured?: boolean;
+}
+
+/**
+ * Represents a pipeline configuration source
+ */
+interface BitbucketPipelineConfigurationSource {
+  source: string;
+  uri: string;
+}
+
+/**
+ * Represents a pipeline step
+ */
+interface BitbucketPipelineStep {
+  uuid: string;
+  type: "pipeline_step";
+  name?: string;
+  started_on?: string;
+  completed_on?: string;
+  state: BitbucketPipelineState;
+  image?: {
+    name: string;
+    username?: string;
+    password?: string;
+    email?: string;
+  };
+  setup_commands?: BitbucketPipelineCommand[];
+  script_commands?: BitbucketPipelineCommand[];
+}
+
+/**
+ * Represents a pipeline command
+ */
+interface BitbucketPipelineCommand {
+  name?: string;
+  command: string;
 }
 
 // =========== MCP SERVER ===========
@@ -979,6 +1082,224 @@ class BitbucketServer {
             required: ["workspace", "repo_slug", "pull_request_id"],
           },
         },
+        {
+          name: "getPendingReviewPRs",
+          description: "List all open pull requests in the workspace where the authenticated user is a reviewer and has not yet approved.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              workspace: {
+                type: "string",
+                description: "Bitbucket workspace name (optional, defaults to BITBUCKET_WORKSPACE)",
+              },
+              limit: {
+                type: "number",
+                description: "Maximum number of PRs to return (optional)",
+              },
+              repositoryList: {
+                type: "array",
+                items: { type: "string" },
+                description: "List of repository slugs to check (optional)",
+              },
+            },
+          },
+        },
+        {
+          name: "listPipelineRuns",
+          description: "List pipeline runs for a repository",
+          inputSchema: {
+            type: "object",
+            properties: {
+              workspace: {
+                type: "string",
+                description: "Bitbucket workspace name",
+              },
+              repo_slug: { type: "string", description: "Repository slug" },
+              limit: {
+                type: "number",
+                description: "Maximum number of pipelines to return",
+              },
+              status: {
+                type: "string",
+                enum: ["PENDING", "IN_PROGRESS", "SUCCESSFUL", "FAILED", "ERROR", "STOPPED"],
+                description: "Filter pipelines by status",
+              },
+              target_branch: {
+                type: "string",
+                description: "Filter pipelines by target branch",
+              },
+              trigger_type: {
+                type: "string",
+                enum: ["manual", "push", "pullrequest", "schedule"],
+                description: "Filter pipelines by trigger type",
+              },
+            },
+            required: ["workspace", "repo_slug"],
+          },
+        },
+        {
+          name: "getPipelineRun",
+          description: "Get details for a specific pipeline run",
+          inputSchema: {
+            type: "object",
+            properties: {
+              workspace: {
+                type: "string",
+                description: "Bitbucket workspace name",
+              },
+              repo_slug: { type: "string", description: "Repository slug" },
+              pipeline_uuid: {
+                type: "string",
+                description: "Pipeline UUID",
+              },
+            },
+            required: ["workspace", "repo_slug", "pipeline_uuid"],
+          },
+        },
+        {
+          name: "runPipeline",
+          description: "Trigger a new pipeline run",
+          inputSchema: {
+            type: "object",
+            properties: {
+              workspace: {
+                type: "string",
+                description: "Bitbucket workspace name",
+              },
+              repo_slug: { type: "string", description: "Repository slug" },
+              target: {
+                type: "object",
+                description: "Pipeline target configuration",
+                properties: {
+                  ref_type: {
+                    type: "string",
+                    enum: ["branch", "tag", "bookmark", "named_branch"],
+                    description: "Reference type",
+                  },
+                  ref_name: {
+                    type: "string",
+                    description: "Reference name (branch, tag, etc.)",
+                  },
+                  commit_hash: {
+                    type: "string",
+                    description: "Specific commit hash to run pipeline on",
+                  },
+                  selector_type: {
+                    type: "string",
+                    enum: ["default", "custom", "pull-requests"],
+                    description: "Pipeline selector type",
+                  },
+                  selector_pattern: {
+                    type: "string",
+                    description: "Pipeline selector pattern (for custom pipelines)",
+                  },
+                },
+                required: ["ref_type", "ref_name"],
+              },
+              variables: {
+                type: "array",
+                description: "Pipeline variables",
+                items: {
+                  type: "object",
+                  properties: {
+                    key: { type: "string", description: "Variable name" },
+                    value: { type: "string", description: "Variable value" },
+                    secured: {
+                      type: "boolean",
+                      description: "Whether the variable is secured",
+                    },
+                  },
+                  required: ["key", "value"],
+                },
+              },
+            },
+            required: ["workspace", "repo_slug", "target"],
+          },
+        },
+        {
+          name: "stopPipeline",
+          description: "Stop a running pipeline",
+          inputSchema: {
+            type: "object",
+            properties: {
+              workspace: {
+                type: "string",
+                description: "Bitbucket workspace name",
+              },
+              repo_slug: { type: "string", description: "Repository slug" },
+              pipeline_uuid: {
+                type: "string",
+                description: "Pipeline UUID",
+              },
+            },
+            required: ["workspace", "repo_slug", "pipeline_uuid"],
+          },
+        },
+        {
+          name: "getPipelineSteps",
+          description: "List steps for a pipeline run",
+          inputSchema: {
+            type: "object",
+            properties: {
+              workspace: {
+                type: "string",
+                description: "Bitbucket workspace name",
+              },
+              repo_slug: { type: "string", description: "Repository slug" },
+              pipeline_uuid: {
+                type: "string",
+                description: "Pipeline UUID",
+              },
+            },
+            required: ["workspace", "repo_slug", "pipeline_uuid"],
+          },
+        },
+        {
+          name: "getPipelineStep",
+          description: "Get details for a specific pipeline step",
+          inputSchema: {
+            type: "object",
+            properties: {
+              workspace: {
+                type: "string",
+                description: "Bitbucket workspace name",
+              },
+              repo_slug: { type: "string", description: "Repository slug" },
+              pipeline_uuid: {
+                type: "string",
+                description: "Pipeline UUID",
+              },
+              step_uuid: {
+                type: "string",
+                description: "Step UUID",
+              },
+            },
+            required: ["workspace", "repo_slug", "pipeline_uuid", "step_uuid"],
+          },
+        },
+        {
+          name: "getPipelineStepLogs",
+          description: "Get logs for a specific pipeline step",
+          inputSchema: {
+            type: "object",
+            properties: {
+              workspace: {
+                type: "string",
+                description: "Bitbucket workspace name",
+              },
+              repo_slug: { type: "string", description: "Repository slug" },
+              pipeline_uuid: {
+                type: "string",
+                description: "Pipeline UUID",
+              },
+              step_uuid: {
+                type: "string",
+                description: "Step UUID",
+              },
+            },
+            required: ["workspace", "repo_slug", "pipeline_uuid", "step_uuid"],
+          },
+        },
       ],
     }));
 
@@ -1170,6 +1491,60 @@ class BitbucketServer {
               args.workspace as string,
               args.repo_slug as string,
               args.pull_request_id as string
+            );
+          case "getPendingReviewPRs":
+            return await this.getPendingReviewPRs(
+              args.workspace as string | undefined,
+              args.limit as number,
+              args.repositoryList as string[]
+            );
+          case "listPipelineRuns":
+            return await this.listPipelineRuns(
+              args.workspace as string,
+              args.repo_slug as string,
+              args.limit as number,
+              args.status as "PENDING" | "IN_PROGRESS" | "SUCCESSFUL" | "FAILED" | "ERROR" | "STOPPED",
+              args.target_branch as string,
+              args.trigger_type as "manual" | "push" | "pullrequest" | "schedule"
+            );
+          case "getPipelineRun":
+            return await this.getPipelineRun(
+              args.workspace as string,
+              args.repo_slug as string,
+              args.pipeline_uuid as string
+            );
+          case "runPipeline":
+            return await this.runPipeline(
+              args.workspace as string,
+              args.repo_slug as string,
+              args.target as any,
+              args.variables as any[]
+            );
+          case "stopPipeline":
+            return await this.stopPipeline(
+              args.workspace as string,
+              args.repo_slug as string,
+              args.pipeline_uuid as string
+            );
+          case "getPipelineSteps":
+            return await this.getPipelineSteps(
+              args.workspace as string,
+              args.repo_slug as string,
+              args.pipeline_uuid as string
+            );
+          case "getPipelineStep":
+            return await this.getPipelineStep(
+              args.workspace as string,
+              args.repo_slug as string,
+              args.pipeline_uuid as string,
+              args.step_uuid as string
+            );
+          case "getPipelineStepLogs":
+            return await this.getPipelineStepLogs(
+              args.workspace as string,
+              args.repo_slug as string,
+              args.pipeline_uuid as string,
+              args.step_uuid as string
             );
           default:
             throw new McpError(
@@ -2428,6 +2803,502 @@ class BitbucketServer {
       throw new McpError(
         ErrorCode.InternalError,
         `Failed to convert pull request to draft: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+  }
+
+  async getPendingReviewPRs(workspace?: string, limit: number = 50, repositoryList?: string[]) {
+    try {
+      const wsName = workspace || this.config.defaultWorkspace;
+      if (!wsName) {
+        throw new McpError(
+          ErrorCode.InvalidParams,
+          "Workspace must be provided either as a parameter or through BITBUCKET_WORKSPACE environment variable"
+        );
+      }
+
+      const currentUserNickname = this.config.username;
+      if (!currentUserNickname) {
+        throw new McpError(
+          ErrorCode.InvalidParams,
+          "Username must be provided through BITBUCKET_USERNAME environment variable"
+        );
+      }
+
+      logger.info("Getting pending review PRs", { 
+        workspace: wsName, 
+        username: currentUserNickname, 
+        repositoryList: repositoryList?.length || "all repositories",
+        limit 
+      });
+
+      let repositoriesToCheck: string[] = [];
+
+      if (repositoryList && repositoryList.length > 0) {
+        // Use the provided repository list
+        repositoriesToCheck = repositoryList;
+        logger.info(`Checking specific repositories: ${repositoryList.join(', ')}`);
+      } else {
+        // Get all repositories in the workspace (existing behavior)
+        logger.info("Getting all repositories in workspace...");
+        const reposResponse = await this.api.get(`/repositories/${wsName}`, {
+          params: { pagelen: 100 }
+        });
+
+        if (!reposResponse.data.values) {
+          throw new McpError(ErrorCode.InternalError, "Failed to fetch repositories");
+        }
+
+        repositoriesToCheck = reposResponse.data.values.map((repo: any) => repo.name);
+        logger.info(`Found ${repositoriesToCheck.length} repositories to check`);
+      }
+
+      const pendingPRs: any[] = [];
+      const batchSize = 5; // Process repositories in batches to avoid overwhelming the API
+
+      // Process repositories in batches
+      for (let i = 0; i < repositoriesToCheck.length; i += batchSize) {
+        const batch = repositoriesToCheck.slice(i, i + batchSize);
+        
+        // Process batch in parallel
+        const batchPromises = batch.map(async (repoSlug) => {
+          try {
+            logger.info(`Checking repository: ${repoSlug}`);
+            
+            // Get open PRs for this repository with participants expanded
+            const prsResponse = await this.api.get(`/repositories/${wsName}/${repoSlug}/pullrequests`, {
+              params: { 
+                state: 'OPEN',
+                pagelen: Math.min(limit, 50), // Limit per repo to avoid too much data
+                fields: 'values.id,values.title,values.description,values.state,values.created_on,values.updated_on,values.author,values.source,values.destination,values.participants.user.nickname,values.participants.role,values.participants.approved,values.links'
+              }
+            });
+
+            if (!prsResponse.data.values) {
+              return [];
+            }
+
+            // Filter PRs where current user is a reviewer and hasn't approved
+            const reposPendingPRs = prsResponse.data.values.filter((pr: any) => {
+              if (!pr.participants || !Array.isArray(pr.participants)) {
+                logger.debug(`PR ${pr.id} has no participants array`);
+                return false;
+              }
+
+              logger.debug(`PR ${pr.id} participants:`, pr.participants.map((p: any) => ({
+                nickname: p.user?.nickname,
+                role: p.role,
+                approved: p.approved
+              })));
+
+              // Check if current user is a reviewer who hasn't approved
+              const userParticipant = pr.participants.find((participant: any) => 
+                participant.user?.nickname === currentUserNickname &&
+                participant.role === 'REVIEWER' &&
+                participant.approved === false
+              );
+
+              logger.debug(`PR ${pr.id} - User ${currentUserNickname} is pending reviewer:`, !!userParticipant);
+              
+              return !!userParticipant;
+            });
+
+            // Add repository info to each PR
+            return reposPendingPRs.map((pr: any) => ({
+              ...pr,
+              repository: {
+                name: repoSlug,
+                full_name: `${wsName}/${repoSlug}`
+              }
+            }));
+
+          } catch (error) {
+            logger.error(`Error checking repository ${repoSlug}:`, error);
+            return [];
+          }
+        });
+
+        // Wait for batch to complete
+        const batchResults = await Promise.all(batchPromises);
+        
+        // Flatten and add to results
+        for (const repoPRs of batchResults) {
+          pendingPRs.push(...repoPRs);
+          
+          // Stop if we've reached the limit
+          if (pendingPRs.length >= limit) {
+            break;
+          }
+        }
+
+        // Stop processing if we've reached the limit
+        if (pendingPRs.length >= limit) {
+          break;
+        }
+      }
+
+      // Trim to exact limit and sort by updated date
+      const finalResults = pendingPRs
+        .slice(0, limit)
+        .sort((a, b) => new Date(b.updated_on).getTime() - new Date(a.updated_on).getTime());
+
+      logger.info(`Found ${finalResults.length} pending review PRs`);
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify({
+              pending_review_prs: finalResults,
+              total_found: finalResults.length,
+              searched_repositories: repositoriesToCheck.length,
+              user: currentUserNickname,
+              workspace: wsName
+            }, null, 2)
+          }
+        ]
+      };
+
+    } catch (error) {
+      logger.error("Error getting pending review PRs:", error);
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to get pending review PRs: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+
+  // =========== PIPELINE METHODS ===========
+
+  async listPipelineRuns(
+    workspace: string,
+    repo_slug: string,
+    limit?: number,
+    status?: "PENDING" | "IN_PROGRESS" | "SUCCESSFUL" | "FAILED" | "ERROR" | "STOPPED",
+    target_branch?: string,
+    trigger_type?: "manual" | "push" | "pullrequest" | "schedule"
+  ) {
+    try {
+      logger.info("Listing pipeline runs", {
+        workspace,
+        repo_slug,
+        limit,
+        status,
+        target_branch,
+        trigger_type,
+      });
+
+      const params: Record<string, any> = {};
+      if (limit) params.pagelen = limit;
+      if (status) params.status = status;
+      if (target_branch) params["target.branch"] = target_branch;
+      if (trigger_type) params.trigger_type = trigger_type;
+
+      const response = await this.api.get(
+        `/repositories/${workspace}/${repo_slug}/pipelines`,
+        { params }
+      );
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(response.data.values, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      logger.error("Error listing pipeline runs", {
+        error,
+        workspace,
+        repo_slug,
+      });
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to list pipeline runs: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+  }
+
+  async getPipelineRun(workspace: string, repo_slug: string, pipeline_uuid: string) {
+    try {
+      logger.info("Getting pipeline run details", {
+        workspace,
+        repo_slug,
+        pipeline_uuid,
+      });
+
+      const response = await this.api.get(
+        `/repositories/${workspace}/${repo_slug}/pipelines/${pipeline_uuid}`
+      );
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(response.data, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      logger.error("Error getting pipeline run", {
+        error,
+        workspace,
+        repo_slug,
+        pipeline_uuid,
+      });
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to get pipeline run: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+  }
+
+  async runPipeline(
+    workspace: string,
+    repo_slug: string,
+    target: any,
+    variables?: any[]
+  ) {
+    try {
+      logger.info("Triggering pipeline run", {
+        workspace,
+        repo_slug,
+        target,
+        variables: variables?.length || 0,
+      });
+
+      // Build the target object based on the input
+      const pipelineTarget: Record<string, any> = {
+        type: target.commit_hash ? "pipeline_commit_target" : "pipeline_ref_target",
+        ref_type: target.ref_type,
+        ref_name: target.ref_name,
+      };
+
+      // Add commit if specified
+      if (target.commit_hash) {
+        pipelineTarget.commit = {
+          type: "commit",
+          hash: target.commit_hash,
+        };
+      }
+
+      // Add selector if specified
+      if (target.selector_type && target.selector_pattern) {
+        pipelineTarget.selector = {
+          type: target.selector_type,
+          pattern: target.selector_pattern,
+        };
+      }
+
+      // Build the request data
+      const requestData: Record<string, any> = {
+        target: pipelineTarget,
+      };
+
+      // Add variables if provided
+      if (variables && variables.length > 0) {
+        requestData.variables = variables.map((variable: any) => ({
+          key: variable.key,
+          value: variable.value,
+          secured: variable.secured || false,
+        }));
+      }
+
+      const response = await this.api.post(
+        `/repositories/${workspace}/${repo_slug}/pipelines`,
+        requestData
+      );
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(response.data, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      logger.error("Error running pipeline", {
+        error,
+        workspace,
+        repo_slug,
+      });
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to run pipeline: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+  }
+
+  async stopPipeline(workspace: string, repo_slug: string, pipeline_uuid: string) {
+    try {
+      logger.info("Stopping pipeline", {
+        workspace,
+        repo_slug,
+        pipeline_uuid,
+      });
+
+      const response = await this.api.post(
+        `/repositories/${workspace}/${repo_slug}/pipelines/${pipeline_uuid}/stopPipeline`
+      );
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: "Pipeline stop signal sent successfully.",
+          },
+        ],
+      };
+    } catch (error) {
+      logger.error("Error stopping pipeline", {
+        error,
+        workspace,
+        repo_slug,
+        pipeline_uuid,
+      });
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to stop pipeline: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+  }
+
+  async getPipelineSteps(
+    workspace: string,
+    repo_slug: string,
+    pipeline_uuid: string
+  ) {
+    try {
+      logger.info("Getting pipeline steps", {
+        workspace,
+        repo_slug,
+        pipeline_uuid,
+      });
+
+      const response = await this.api.get(
+        `/repositories/${workspace}/${repo_slug}/pipelines/${pipeline_uuid}/steps`
+      );
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(response.data.values, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      logger.error("Error getting pipeline steps", {
+        error,
+        workspace,
+        repo_slug,
+        pipeline_uuid,
+      });
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to get pipeline steps: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+  }
+
+  async getPipelineStep(
+    workspace: string,
+    repo_slug: string,
+    pipeline_uuid: string,
+    step_uuid: string
+  ) {
+    try {
+      logger.info("Getting pipeline step details", {
+        workspace,
+        repo_slug,
+        pipeline_uuid,
+        step_uuid,
+      });
+
+      const response = await this.api.get(
+        `/repositories/${workspace}/${repo_slug}/pipelines/${pipeline_uuid}/steps/${step_uuid}`
+      );
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(response.data, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      logger.error("Error getting pipeline step", {
+        error,
+        workspace,
+        repo_slug,
+        pipeline_uuid,
+        step_uuid,
+      });
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to get pipeline step: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+  }
+
+  async getPipelineStepLogs(
+    workspace: string,
+    repo_slug: string,
+    pipeline_uuid: string,
+    step_uuid: string
+  ) {
+    try {
+      logger.info("Getting pipeline step logs", {
+        workspace,
+        repo_slug,
+        pipeline_uuid,
+        step_uuid,
+      });
+
+      const response = await this.api.get(
+        `/repositories/${workspace}/${repo_slug}/pipelines/${pipeline_uuid}/steps/${step_uuid}/log`,
+        {
+          maxRedirects: 5, // Follow redirects to S3
+          responseType: "text",
+        }
+      );
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: response.data,
+          },
+        ],
+      };
+    } catch (error) {
+      logger.error("Error getting pipeline step logs", {
+        error,
+        workspace,
+        repo_slug,
+        pipeline_uuid,
+        step_uuid,
+      });
+      throw new McpError(
+        ErrorCode.InternalError,
+        `Failed to get pipeline step logs: ${
           error instanceof Error ? error.message : String(error)
         }`
       );
