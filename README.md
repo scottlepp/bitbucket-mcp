@@ -85,6 +85,7 @@ Configure the server using the following environment variables:
 3. Create a new app password with the following permissions:
    - Repositories: Read
    - Pull requests: Read, Write
+   - Pipelines: Read (required for pipeline operations)
 4. Copy the generated password and use it as the `BITBUCKET_PASSWORD` environment variable
 
 ## Integration with Cursor
@@ -177,6 +178,7 @@ Creates a new pull request.
 - `sourceBranch`: Source branch name
 - `targetBranch`: Target branch name
 - `reviewers` (optional): List of reviewer usernames
+- `draft` (optional): Whether to create the pull request as a draft
 
 #### `getPullRequest`
 
@@ -272,6 +274,42 @@ Removes a change request from a pull request.
 - `repo_slug`: Repository slug
 - `pull_request_id`: Pull request ID
 
+#### `createDraftPullRequest`
+
+Creates a new draft pull request.
+
+**Parameters:**
+
+- `workspace`: Bitbucket workspace name
+- `repo_slug`: Repository slug
+- `title`: Pull request title
+- `description`: Pull request description
+- `sourceBranch`: Source branch name
+- `targetBranch`: Target branch name
+- `reviewers` (optional): List of reviewer usernames
+
+**Note:** This is equivalent to calling `createPullRequest` with `draft: true`.
+
+#### `publishDraftPullRequest`
+
+Publishes a draft pull request to make it ready for review.
+
+**Parameters:**
+
+- `workspace`: Bitbucket workspace name
+- `repo_slug`: Repository slug
+- `pull_request_id`: Pull request ID
+
+#### `convertTodraft`
+
+Converts a regular pull request to draft status.
+
+**Parameters:**
+
+- `workspace`: Bitbucket workspace name
+- `repo_slug`: Repository slug
+- `pull_request_id`: Pull request ID
+
 ### Pull Request Comment Operations
 
 #### `getPullRequestComments`
@@ -284,17 +322,48 @@ Lists comments on a pull request.
 - `repo_slug`: Repository slug
 - `pull_request_id`: Pull request ID
 
-#### `createPullRequestComment`
+#### `addPullRequestComment`
 
-Creates a comment on a pull request.
+Creates a comment on a pull request (general or inline).
 
 **Parameters:**
 
 - `workspace`: Bitbucket workspace name
 - `repo_slug`: Repository slug
 - `pull_request_id`: Pull request ID
-- `content`: Comment content
-- `inline` (optional): Inline comment information
+- `content`: Comment content in markdown format
+- `inline` (optional): Inline comment information for commenting on specific lines
+
+**Inline Comment Format:**
+
+The `inline` parameter allows you to create comments on specific lines of code in the pull request diff:
+
+```json
+{
+  "path": "src/file.ts",
+  "to": 15,     // Line number in NEW version (for added/modified lines)
+  "from": 10    // Line number in OLD version (for deleted/modified lines) 
+}
+```
+
+**Examples:**
+
+- **General comment**: Omit the `inline` parameter for a general pull request comment
+- **Comment on new line**: Use only `to` parameter
+- **Comment on deleted line**: Use only `from` parameter  
+- **Comment on modified line**: Use both `from` and `to` parameters
+
+**Usage:**
+```javascript
+// General comment
+addPullRequestComment(workspace, repo, pr_id, "Great work!")
+
+// Inline comment on new line 25
+addPullRequestComment(workspace, repo, pr_id, "Consider error handling here", {
+  path: "src/service.ts",
+  to: 25
+})
+```
 
 #### `getPullRequestComment`
 
@@ -465,6 +534,84 @@ Lists commit statuses for a pull request.
 - `workspace`: Bitbucket workspace name
 - `repo_slug`: Repository slug
 - `pull_request_id`: Pull request ID
+
+### Pipeline Operations
+
+#### `listPipelineRuns`
+
+Lists pipeline runs for a repository.
+
+**Parameters:**
+
+- `workspace`: Bitbucket workspace name
+- `repo_slug`: Repository slug
+- `limit` (optional): Maximum number of pipelines to return
+- `status` (optional): Filter pipelines by status (`PENDING`, `IN_PROGRESS`, `SUCCESSFUL`, `FAILED`, `ERROR`, `STOPPED`)
+- `target_branch` (optional): Filter pipelines by target branch
+- `trigger_type` (optional): Filter pipelines by trigger type (`manual`, `push`, `pullrequest`, `schedule`)
+
+#### `getPipelineRun`
+
+Gets details for a specific pipeline run.
+
+**Parameters:**
+
+- `workspace`: Bitbucket workspace name
+- `repo_slug`: Repository slug
+- `pipeline_uuid`: Pipeline UUID
+
+#### `runPipeline`
+
+Triggers a new pipeline run.
+
+**Parameters:**
+
+- `workspace`: Bitbucket workspace name
+- `repo_slug`: Repository slug
+- `target`: Pipeline target configuration (object with `ref_type`, `ref_name`, and optional `commit_hash`, `selector_type`, `selector_pattern`)
+- `variables` (optional): Array of pipeline variables (objects with `key`, `value`, and optional `secured` fields)
+
+#### `stopPipeline`
+
+Stops a running pipeline.
+
+**Parameters:**
+
+- `workspace`: Bitbucket workspace name
+- `repo_slug`: Repository slug
+- `pipeline_uuid`: Pipeline UUID
+
+#### `getPipelineSteps`
+
+Lists steps for a pipeline run.
+
+**Parameters:**
+
+- `workspace`: Bitbucket workspace name
+- `repo_slug`: Repository slug
+- `pipeline_uuid`: Pipeline UUID
+
+#### `getPipelineStep`
+
+Gets details for a specific pipeline step.
+
+**Parameters:**
+
+- `workspace`: Bitbucket workspace name
+- `repo_slug`: Repository slug
+- `pipeline_uuid`: Pipeline UUID
+- `step_uuid`: Step UUID
+
+#### `getPipelineStepLogs`
+
+Gets logs for a specific pipeline step.
+
+**Parameters:**
+
+- `workspace`: Bitbucket workspace name
+- `repo_slug`: Repository slug
+- `pipeline_uuid`: Pipeline UUID
+- `step_uuid`: Step UUID
 
 ## Development
 
