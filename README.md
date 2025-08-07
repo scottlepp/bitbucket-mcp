@@ -3,7 +3,7 @@
 A Model Context Protocol (MCP) server for integrating with Bitbucket Cloud and Server APIs. This MCP server enables AI assistants like Cursor to interact with your Bitbucket repositories, pull requests, and other resources.
 
 ## Safety First
-This is a safe and responsible package — no DELETE operations are used, so there’s no risk of data loss.
+This is a safe and responsible package — no DELETE operations are used, so there's no risk of data loss.
 Every pull request is analyzed with CodeQL to ensure the code remains secure.
 
 [![CodeQL](https://github.com/MatanYemini/bitbucket-mcp/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/MatanYemini/bitbucket-mcp/actions/workflows/github-code-scanning/codeql)
@@ -78,6 +78,28 @@ Configure the server using the following environment variables:
 
 \* Either `BITBUCKET_TOKEN` or both `BITBUCKET_USERNAME` and `BITBUCKET_PASSWORD` must be provided.
 
+### BITBUCKET_URL Configuration
+
+⚠️ **Important**: The `BITBUCKET_URL` should be your **workspace URL**, not the API endpoint. The server will automatically handle API routing.
+
+**Correct formats:**
+```bash
+# For workspace "my-company"
+BITBUCKET_URL="https://bitbucket.org/my-company"
+
+# For user workspace "john-doe" 
+BITBUCKET_URL="https://bitbucket.org/john-doe"
+```
+
+**❌ Incorrect formats:**
+```bash
+# DON'T use the API endpoint directly
+BITBUCKET_URL="https://api.bitbucket.org/2.0/"
+
+# DON'T include repository names
+BITBUCKET_URL="https://bitbucket.org/my-company/my-repo"
+```
+
 ### Creating a Bitbucket App Password
 
 1. Log in to your Bitbucket account
@@ -87,6 +109,52 @@ Configure the server using the following environment variables:
    - Pull requests: Read, Write
    - Pipelines: Read (required for pipeline operations)
 4. Copy the generated password and use it as the `BITBUCKET_PASSWORD` environment variable
+
+## Troubleshooting
+
+### Common Issues
+
+#### 401 Authentication Errors
+
+If you're getting 401 authentication errors, check the following:
+
+1. **Verify your app password**: Make sure you're using an App Password, not your regular Bitbucket password
+2. **Check workspace URL format**: Ensure `BITBUCKET_URL` follows the correct format (see examples above)
+3. **Verify app password permissions**: Your app password needs at least "Repositories: Read" permission
+4. **Test API access**: Verify your credentials work by testing the Bitbucket API directly:
+
+```bash
+# Test with curl (replace with your actual values)
+curl -u "your-username:your-app-password" \
+  "https://api.bitbucket.org/2.0/repositories/your-workspace"
+```
+
+#### MCP Server Not Starting
+
+1. **Check Node.js version**: Ensure you're running Node.js 18 or higher
+2. **Verify environment variables**: Double-check all required environment variables are set
+3. **Check package installation**: Try reinstalling the package:
+   ```bash
+   npm uninstall -g bitbucket-mcp
+   npm install -g bitbucket-mcp
+   ```
+
+#### Repository Access Issues
+
+1. **Workspace permissions**: Make sure your user has access to the workspace
+2. **Repository visibility**: Private repositories require appropriate permissions
+3. **App password scope**: Ensure your app password has the necessary permissions
+
+### Getting Help
+
+If you encounter issues:
+
+1. Check the [Bitbucket REST API documentation](https://developer.atlassian.com/cloud/bitbucket/rest/intro/) for API details
+2. Review the [Bitbucket Cloud documentation](https://support.atlassian.com/bitbucket-cloud/) for general help
+3. Open an issue on this repository with:
+   - Your configuration (without sensitive credentials)
+   - Error messages or logs
+   - Steps to reproduce the issue
 
 ## Integration with Cursor
 
@@ -646,4 +714,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [GitHub Repository](https://github.com/MatanYemini/bitbucket-mcp)
 - [npm Package](https://www.npmjs.com/package/bitbucket-mcp)
 - [Model Context Protocol](https://modelcontextprotocol.io/)
-- [Bitbucket REST API - Pull Requests](https://developer.atlassian.com/cloud/bitbucket/rest/api-group-pullrequests/)
+- [Bitbucket REST API Documentation](https://developer.atlassian.com/cloud/bitbucket/rest/intro/)
+- [Bitbucket Cloud Documentation](https://support.atlassian.com/bitbucket-cloud/)
