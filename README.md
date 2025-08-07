@@ -90,9 +90,7 @@ Configure the server using the following environment variables:
 
 ## Troubleshooting
 
-### Common Issues
-
-#### 401 Authentication Errors
+### 401 Authentication Errors
 
 If you're getting 401 authentication errors, check the following:
 
@@ -109,32 +107,12 @@ If you're getting 401 authentication errors, check the following:
      "https://api.bitbucket.org/2.0/repositories/your-workspace"
    ```
 
-#### MCP Server Not Starting
-
-1. **Check Node.js version**: Ensure you're running Node.js 18 or higher
-2. **Verify environment variables**: Double-check all required environment variables are set
-3. **Check package installation**: Try reinstalling the package:
-   ```bash
-   npm uninstall -g bitbucket-mcp
-   npm install -g bitbucket-mcp
-   ```
-
-#### Repository Access Issues
-
-1. **Workspace permissions**: Make sure your user has access to the workspace
-2. **Repository visibility**: Private repositories require appropriate permissions
-3. **App password scope**: Ensure your app password has the necessary permissions
-
 ### Getting Help
 
 If you encounter issues:
 
 1. Check the [Bitbucket REST API documentation](https://developer.atlassian.com/cloud/bitbucket/rest/intro/) for API details
 2. Review the [Bitbucket Cloud documentation](https://support.atlassian.com/bitbucket-cloud/) for general help
-3. Open an issue on this repository with:
-   - Your configuration (without sensitive credentials)
-   - Error messages or logs
-   - Steps to reproduce the issue
 
 ## Integration with Cursor
 
