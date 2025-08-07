@@ -78,28 +78,6 @@ Configure the server using the following environment variables:
 
 \* Either `BITBUCKET_TOKEN` or both `BITBUCKET_USERNAME` and `BITBUCKET_PASSWORD` must be provided.
 
-### BITBUCKET_URL Configuration
-
-⚠️ **Important**: The `BITBUCKET_URL` should be your **workspace URL**, not the API endpoint. The server will automatically handle API routing.
-
-**Correct formats:**
-```bash
-# For workspace "my-company"
-BITBUCKET_URL="https://bitbucket.org/my-company"
-
-# For user workspace "john-doe" 
-BITBUCKET_URL="https://bitbucket.org/john-doe"
-```
-
-**❌ Incorrect formats:**
-```bash
-# DON'T use the API endpoint directly
-BITBUCKET_URL="https://api.bitbucket.org/2.0/"
-
-# DON'T include repository names
-BITBUCKET_URL="https://bitbucket.org/my-company/my-repo"
-```
-
 ### Creating a Bitbucket App Password
 
 1. Log in to your Bitbucket account
@@ -119,15 +97,17 @@ BITBUCKET_URL="https://bitbucket.org/my-company/my-repo"
 If you're getting 401 authentication errors, check the following:
 
 1. **Verify your app password**: Make sure you're using an App Password, not your regular Bitbucket password
-2. **Check workspace URL format**: Ensure `BITBUCKET_URL` follows the correct format (see examples above)
-3. **Verify app password permissions**: Your app password needs at least "Repositories: Read" permission
+2. **Verify app password permissions**: Your app password needs at least "Repositories: Read" permission
+3. **Try the API URL format**: If you're still getting 401 errors, try using the direct API URL format:
+   ```bash
+   BITBUCKET_URL="https://api.bitbucket.org/2.0"
+   ```
 4. **Test API access**: Verify your credentials work by testing the Bitbucket API directly:
-
-```bash
-# Test with curl (replace with your actual values)
-curl -u "your-username:your-app-password" \
-  "https://api.bitbucket.org/2.0/repositories/your-workspace"
-```
+   ```bash
+   # Test with curl (replace with your actual values)
+   curl -u "your-username:your-app-password" \
+     "https://api.bitbucket.org/2.0/repositories/your-workspace"
+   ```
 
 #### MCP Server Not Starting
 
