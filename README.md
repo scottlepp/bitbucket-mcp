@@ -105,7 +105,7 @@ If you're getting 401 authentication errors, check the following:
    # Test with curl (replace with your actual values)
    curl -u "your-username:your-app-password" \
      "https://api.bitbucket.org/2.0/repositories/your-workspace"
-   ```
+   ```5. **Atlassian API Key**: Put the Atlassian API Key in the BITBUCKET_PASSWORD variable, not BITBUCKET_TOKEN
 
 ### Getting Help
 
