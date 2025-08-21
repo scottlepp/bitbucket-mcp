@@ -350,6 +350,39 @@ Lists comments on a pull request.
 - `repo_slug`: Repository slug
 - `pull_request_id`: Pull request ID
 
+**Comment Threading and Replies**
+
+The Bitbucket MCP server supports creating threaded conversations by allowing you to reply to existing comments. When you reply to a comment:
+
+1. **Thread Structure**: Replies are nested under their parent comments, creating a conversation thread
+2. **Context Preservation**: The reply maintains the context of the original comment
+3. **Notification**: Users are notified when someone replies to their comments
+4. **Draft Support**: You can create pending (draft) replies that can be published later
+
+**Reply Workflow:**
+1. Use `getPullRequestComments` to list existing comments
+2. Identify the comment ID you want to reply to
+3. Use either `addPullRequestComment` with the `parent` parameter or `replyToPullRequestComment`
+4. Optionally create as a pending comment for review before publishing
+
+**Example: Creating a Comment Thread**
+
+```javascript
+// 1. Get existing comments to find the one you want to reply to
+const comments = await getPullRequestComments("my-workspace", "my-repo", "123");
+
+// 2. Reply to a specific comment (option 1: using addPullRequestComment)
+await addPullRequestComment("my-workspace", "my-repo", "123", "I'll fix this issue", undefined, undefined, {
+  id: "comment_456"
+});
+
+// 3. Reply to a specific comment (option 2: using the dedicated reply tool)
+await replyToPullRequestComment("my-workspace", "my-repo", "123", "comment_456", "I'll fix this issue");
+
+// 4. Create a pending reply for review before publishing
+await replyToPullRequestComment("my-workspace", "my-repo", "123", "comment_456", "I'll fix this issue", true);
+```
+
 #### `addPullRequestComment`
 
 Creates a comment on a pull request (general, inline, or reply to parent comment).
@@ -683,6 +716,19 @@ Gets logs for a specific pipeline step.
 - `repo_slug`: Repository slug
 - `pipeline_uuid`: Pipeline UUID
 - `step_uuid`: Step UUID
+
+## Summary of New Features
+
+### Comment Reply Functionality
+
+The latest version of the Bitbucket MCP server introduces enhanced comment management capabilities:
+
+- **Threaded Conversations**: Reply to existing comments to create conversation threads
+- **Dual Tool Support**: Use either `addPullRequestComment` with the `parent` parameter or the dedicated `replyToPullRequestComment` tool
+- **Draft Support**: Create pending (draft) replies that can be reviewed before publishing
+- **Context Preservation**: Replies maintain the context of the original comment
+
+This functionality enables better collaboration on pull requests by allowing reviewers and contributors to have meaningful discussions directly in the code review interface.
 
 ## Development
 
