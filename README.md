@@ -18,6 +18,8 @@ This server implements the Model Context Protocol standard to provide AI assista
 - Listing and retrieving repositories
 - Getting repository details
 - Fetching pull requests
+- Managing pull request comments (including replies to existing comments)
+- Pipeline operations
 - And more...
 
 ## Installation
@@ -350,7 +352,7 @@ Lists comments on a pull request.
 
 #### `addPullRequestComment`
 
-Creates a comment on a pull request (general or inline).
+Creates a comment on a pull request (general, inline, or reply to parent comment).
 
 **Parameters:**
 
@@ -358,7 +360,9 @@ Creates a comment on a pull request (general or inline).
 - `repo_slug`: Repository slug
 - `pull_request_id`: Pull request ID
 - `content`: Comment content in markdown format
+- `pending` (optional): Whether to create this comment as a pending comment (draft state)
 - `inline` (optional): Inline comment information for commenting on specific lines
+- `parent` (optional): Parent comment information for replying to an existing comment
 
 **Inline Comment Format:**
 
@@ -372,12 +376,23 @@ The `inline` parameter allows you to create comments on specific lines of code i
 }
 ```
 
+**Parent Comment Format:**
+
+The `parent` parameter allows you to reply to an existing comment:
+
+```json
+{
+  "id": "PARENT_COMMENT_ID"
+}
+```
+
 **Examples:**
 
-- **General comment**: Omit the `inline` parameter for a general pull request comment
-- **Comment on new line**: Use only `to` parameter
-- **Comment on deleted line**: Use only `from` parameter  
-- **Comment on modified line**: Use both `from` and `to` parameters
+- **General comment**: Omit the `inline` and `parent` parameters for a general pull request comment
+- **Comment on new line**: Use only `to` parameter in `inline`
+- **Comment on deleted line**: Use only `from` parameter in `inline`
+- **Comment on modified line**: Use both `from` and `to` parameters in `inline`
+- **Reply to comment**: Use the `parent` parameter with the comment ID you want to reply to
 
 **Usage:**
 ```javascript
@@ -389,6 +404,36 @@ addPullRequestComment(workspace, repo, pr_id, "Consider error handling here", {
   path: "src/service.ts",
   to: 25
 })
+
+// Reply to an existing comment
+addPullRequestComment(workspace, repo, pr_id, "I agree with this feedback", undefined, undefined, {
+  id: "12345"
+})
+
+// Pending (draft) comment
+addPullRequestComment(workspace, repo, pr_id, "Draft comment", true)
+```
+
+#### `replyToPullRequestComment`
+
+A dedicated tool for replying to existing comments on a pull request. This is equivalent to using `addPullRequestComment` with the `parent` parameter.
+
+**Parameters:**
+
+- `workspace`: Bitbucket workspace name
+- `repo_slug`: Repository slug
+- `pull_request_id`: Pull request ID
+- `parent_comment_id`: ID of the parent comment to reply to
+- `content`: Reply content in markdown format
+- `pending` (optional): Whether to create this reply as a pending comment (draft state)
+
+**Usage:**
+```javascript
+// Reply to comment 12345
+replyToPullRequestComment(workspace, repo, pr_id, "12345", "Thanks for the feedback!")
+
+// Pending reply (draft)
+replyToPullRequestComment(workspace, repo, pr_id, "12345", "I'll address this", true)
 ```
 
 #### `getPullRequestComment`

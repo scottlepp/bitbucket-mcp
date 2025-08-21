@@ -365,7 +365,7 @@ class BitbucketServer {
                 },
                 {
                     name: "addPullRequestComment",
-                    description: "Add a comment to a pull request (general or inline)",
+                    description: "Add a comment to a pull request (general, inline, or reply to parent comment)",
                     inputSchema: {
                         type: "object",
                         properties: {
@@ -404,6 +404,17 @@ class BitbucketServer {
                                     },
                                 },
                                 required: ["path"],
+                            },
+                            parent: {
+                                type: "object",
+                                description: "Parent comment information for replying to an existing comment",
+                                properties: {
+                                    id: {
+                                        type: "string",
+                                        description: "ID of the parent comment to reply to",
+                                    },
+                                },
+                                required: ["id"],
                             },
                         },
                         required: ["workspace", "repo_slug", "pull_request_id", "content"],
@@ -449,6 +460,37 @@ class BitbucketServer {
                             },
                         },
                         required: ["workspace", "repo_slug", "pull_request_id", "content"],
+                    },
+                },
+                {
+                    name: "replyToPullRequestComment",
+                    description: "Reply to an existing comment on a pull request",
+                    inputSchema: {
+                        type: "object",
+                        properties: {
+                            workspace: {
+                                type: "string",
+                                description: "Bitbucket workspace name",
+                            },
+                            repo_slug: { type: "string", description: "Repository slug" },
+                            pull_request_id: {
+                                type: "string",
+                                description: "Pull request ID",
+                            },
+                            parent_comment_id: {
+                                type: "string",
+                                description: "ID of the parent comment to reply to",
+                            },
+                            content: {
+                                type: "string",
+                                description: "Reply content in markdown format",
+                            },
+                            pending: {
+                                type: "boolean",
+                                description: "Whether to create this reply as a pending comment (draft state)",
+                            },
+                        },
+                        required: ["workspace", "repo_slug", "pull_request_id", "parent_comment_id", "content"],
                     },
                 },
                 {
@@ -1000,9 +1042,11 @@ class BitbucketServer {
                     case "getPullRequestCommits":
                         return await this.getPullRequestCommits(args.workspace, args.repo_slug, args.pull_request_id);
                     case "addPullRequestComment":
-                        return await this.addPullRequestComment(args.workspace, args.repo_slug, args.pull_request_id, args.content, args.inline, args.pending);
+                        return await this.addPullRequestComment(args.workspace, args.repo_slug, args.pull_request_id, args.content, args.inline, args.pending, args.parent);
                     case "addPendingPullRequestComment":
                         return await this.addPendingPullRequestComment(args.workspace, args.repo_slug, args.pull_request_id, args.content, args.inline);
+                    case "replyToPullRequestComment":
+                        return await this.replyToPullRequestComment(args.workspace, args.repo_slug, args.pull_request_id, args.parent_comment_id, args.content, args.pending);
                     case "publishPendingComments":
                         return await this.publishPendingComments(args.workspace, args.repo_slug, args.pull_request_id);
                     case "getRepositoryBranchingModel":
@@ -1490,7 +1534,7 @@ class BitbucketServer {
             throw new McpError(ErrorCode.InternalError, `Failed to get pull request commits: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
-    async addPullRequestComment(workspace, repo_slug, pull_request_id, content, inline, pending) {
+    async addPullRequestComment(workspace, repo_slug, pull_request_id, content, inline, pending, parent) {
         try {
             logger.info("Adding comment to Bitbucket pull request", {
                 workspace,
@@ -1520,6 +1564,12 @@ class BitbucketServer {
                 if (inline.to !== undefined) {
                     commentData.inline.to = inline.to;
                 }
+            }
+            // Add parent comment information if provided (for replies)
+            if (parent) {
+                commentData.parent = {
+                    id: parent.id,
+                };
             }
             const response = await this.api.post(`/repositories/${workspace}/${repo_slug}/pullrequests/${pull_request_id}/comments`, commentData);
             return {
@@ -1747,7 +1797,8 @@ class BitbucketServer {
                 inline: inline ? "inline comment" : "general comment",
             });
             // Use the existing addPullRequestComment method with pending=true
-            return await this.addPullRequestComment(workspace, repo_slug, pull_request_id, content, inline, true // Set pending to true for draft comment
+            return await this.addPullRequestComment(workspace, repo_slug, pull_request_id, content, inline, true, // Set pending to true for draft comment
+            undefined // No parent comment for pending comments
             );
         }
         catch (error) {
@@ -1758,6 +1809,31 @@ class BitbucketServer {
                 pull_request_id,
             });
             throw new McpError(ErrorCode.InternalError, `Failed to add pending pull request comment: ${error instanceof Error ? error.message : String(error)}`);
+        }
+    }
+    async replyToPullRequestComment(workspace, repo_slug, pull_request_id, parent_comment_id, content, pending) {
+        try {
+            logger.info("Replying to pull request comment", {
+                workspace,
+                repo_slug,
+                pull_request_id,
+                parent_comment_id,
+                pending: pending || false,
+            });
+            // Use the existing addPullRequestComment method with parent comment
+            return await this.addPullRequestComment(workspace, repo_slug, pull_request_id, content, undefined, // No inline comment
+            pending, { id: parent_comment_id } // Set parent comment
+            );
+        }
+        catch (error) {
+            logger.error("Error replying to pull request comment", {
+                error,
+                workspace,
+                repo_slug,
+                pull_request_id,
+                parent_comment_id,
+            });
+            throw new McpError(ErrorCode.InternalError, `Failed to reply to pull request comment: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
     async publishPendingComments(workspace, repo_slug, pull_request_id) {
